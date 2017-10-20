@@ -1,34 +1,70 @@
 import java.io.IOException;
-import java.net.ServerSocket;
+import java.io.PrintWriter;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedList;
 
-public class HeartBeat {
+public class HeartBeat implements Runnable {
 
-    public static void main (String[] args) {
+	private HashMap<ServerInfo, Date> serversInfo;
+	private int sequence;
+	private int port;
+	
+	public HeartBeat(HashMap<ServerInfo, Date> serversInfo, int port) {
+		this.serversInfo = serversInfo;
+		this.port = port;
+		sequence = 0;
+	}
+	
+	@Override
+	public void run() {
+		while(true) {
+			try {
+				try {
+					LinkedList<Thread> threads = new LinkedList<>();
+					for(ServerInfo si : serversInfo.keySet()) {
+						threads.add(new Thread(new Runnable() {
+							
+							@Override
+							public void run() {
+								try {
+						            // create socket with a timeout of 2 seconds
+						            Socket toServer = new Socket();
+						            toServer.connect(new InetSocketAddress(si.getHost(), si.getPort()), 2000);
+						            PrintWriter printWriter = new PrintWriter(toServer.getOutputStream(), true);
 
-        if (args.length != 1) {
-            return;
-        }
+						            // send the message forward
+						            printWriter.println(String.format("hb|%d|%d", port, sequence));
+						            printWriter.flush();
 
-        HashMap<String, Date> serverStatus = new HashMap<String, Date>(){};
-        serverStatus.put(args[0], new Date());
-
-        // start up PeriodicPrinter
-        new Thread(new PeriodicPrinterRunnable(serverStatus)).start();
-
-        // start up PeriodicHeartBeat
-        new Thread(new PeriodicHeartBeatRunnable(serverStatus)).start();
-
-        // create server socket and accept client connection
-        try {
-            ServerSocket serverSocket = new ServerSocket(8333);
-            while (true) {
-                Socket toClient = serverSocket.accept();
-                new Thread(new HeartBeatServerRunnable(toClient, serverStatus)).start();
-            }
-        } catch (IOException e) {
-        }
-    }
+						            // close printWriter and socket
+						            printWriter.close();
+						            toServer.close();
+						        } catch (IOException e) {
+						        }
+							}
+						}));
+						threads.getLast().start();
+					}
+					for(Thread t : threads)
+						try {
+							t.join();
+						} catch(InterruptedException e) {
+							
+						}
+					
+				} catch (Exception e) {
+					
+				}
+				Thread.sleep(2000);
+				++sequence;
+			} 
+			catch (InterruptedException e) {
+				
+			}
+		}
+	}
 }

@@ -32,7 +32,7 @@ public class BlockchainServer {
         PeriodicCommitRunnable pcr = new PeriodicCommitRunnable(blockchain);
         Thread pct = new Thread(pcr);
         pct.start();
-
+        new Thread(new HeartBeat(serverStatus, localPort)).start();
         ServerSocket serverSocket = null;
         try {
             serverSocket = new ServerSocket(localPort);
