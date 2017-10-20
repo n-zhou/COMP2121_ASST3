@@ -23,11 +23,10 @@ public class HeartBeat implements Runnable {
 	public void run() {
 		while(true) {
 			try {
-				try {
-					LinkedList<Thread> threads = new LinkedList<>();
+				LinkedList<Thread> threads = new LinkedList<>();
+				synchronized(serversInfo) {
 					for(ServerInfo si : serversInfo.keySet()) {
 						threads.add(new Thread(new Runnable() {
-							
 							@Override
 							public void run() {
 								try {
@@ -52,16 +51,15 @@ public class HeartBeat implements Runnable {
 					for(Thread t : threads)
 						try {
 							t.join();
-						} catch(InterruptedException e) {
-							
+						} catch(InterruptedException e) {	
 						}
-					
-				} catch (Exception e) {
 					
 				}
 				Thread.sleep(2000);
 				++sequence;
-			} 
+				Date date = new Date();
+				
+			}
 			catch (InterruptedException e) {
 				
 			}
