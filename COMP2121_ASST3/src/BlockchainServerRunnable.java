@@ -55,10 +55,15 @@ public class BlockchainServerRunnable implements Runnable{
                         break;
                     case "cc":
                         return;
+                    case "hb":
+                    		
+                    	break;
                     default:
                         outWriter.print("Error\n\n");
                         outWriter.flush();
                 }
+                //to remove error on catching Interrupted Exception
+                Thread.sleep(1);
             }
         } catch (IOException e) {
         } catch (InterruptedException e) {

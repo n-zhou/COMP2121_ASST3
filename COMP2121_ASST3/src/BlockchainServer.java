@@ -28,15 +28,14 @@ public class BlockchainServer {
 
         HashMap<ServerInfo, Date> serverStatus = new HashMap<ServerInfo, Date>();
         serverStatus.put(new ServerInfo(remoteHost, remotePort), new Date());
-
+        
         PeriodicCommitRunnable pcr = new PeriodicCommitRunnable(blockchain);
         Thread pct = new Thread(pcr);
         pct.start();
 
         ServerSocket serverSocket = null;
         try {
-            serverSocket = new ServerSocket(localPortNumber);
-
+            serverSocket = new ServerSocket(localPort);
             while (true) {
                 Socket clientSocket = serverSocket.accept();
                 new Thread(new BlockchainServerRunnable(clientSocket, blockchain, serverStatus)).start();
