@@ -25,10 +25,10 @@ public class PeriodicCommitRunnable implements Runnable{
     @Override
     public void run() {
         while (isRunning) {
-            blockchain.commit(nonce);
+    		blockchain.commit(nonce);
             nonce = randomGenerator.nextInt();
             try {
-                Thread.sleep(400);
+                Thread.sleep(0);
             } catch (InterruptedException e) {
             }
         }

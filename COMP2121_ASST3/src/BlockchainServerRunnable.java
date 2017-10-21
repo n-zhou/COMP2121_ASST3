@@ -42,8 +42,7 @@ public class BlockchainServerRunnable implements Runnable{
                 if (inputLine == null) {
                     break;
                 }
-
-                String[] tokens = inputLine.split("\\|");
+            	String[] tokens = inputLine.split("\\|");
                 switch (tokens[0]) {
                     case "tx":
                         if (blockchain.addTransaction(inputLine))
@@ -60,6 +59,7 @@ public class BlockchainServerRunnable implements Runnable{
                         return;
                     case "hb":
                     	ServerInfo p = new ServerInfo(remoteIP, Integer.parseInt(tokens[1]));
+                    	System.out.println(inputLine);
                     	synchronized(serverStatus) {
                     		if(!serverStatus.containsKey(p) || tokens[2].equals("0")) {
                     			broadcast(p);
@@ -77,18 +77,41 @@ public class BlockchainServerRunnable implements Runnable{
                         	}
                     	}
                     	break;
+                    case "cu":
+                    	synchronized(blockchain) {
+                    		if(tokens.length == 1) {
+                    			if(blockchain.getLength() == 0)
+                    				outWriter.println(String.format("lb|%d|%d|%s", clientSocket.getLocalPort(), 
+                    						blockchain.getLength(), base64(new byte[32])));
+                    			else
+                    				outWriter.println(String.format("lb|%d|%d|%s", clientSocket.getLocalPort(), 
+                    						blockchain.getLength(), Base64.getEncoder().encodeToString(blockchain.getHead().calculateHash())));
+                        		outWriter.flush();
+                        	} else {
+                        		Block find = blockchain.getHead();
+                        		ObjectOutputStream output = new ObjectOutputStream(clientSocket.getOutputStream());
+                        		System.out.println("hash: " + tokens[1]);
+                        		while(!base64(find.calculateHash()).equals(tokens[1])) {
+                        			find = find.getPreviousBlock();
+                        		}
+                        		output.writeObject(find);
+                        		output.flush();
+                        		return;
+                        	}
+                    	}	
+                    	break;
                     case "lb":
-                    	
+                    	synchronized(blockchain) {
+                    		naiveCatchUp(inputLine); 
+                    	}	
                     	break;
                     default:
                         outWriter.print("Error\n\n");
                         outWriter.flush();
                 }
-                //to remove error on catching Interrupted Exception
-                Thread.sleep(1);
+         
             }
         } catch (IOException e) {
-        } catch (InterruptedException e) {
         }
     }
     
@@ -156,5 +179,71 @@ public class BlockchainServerRunnable implements Runnable{
     			
     		}
 	}
+    
+    public void naiveCatchUp(String line) {
+    	System.out.println(line);
+    	String[] token = line.split("[|]");
+    	int port = Integer.parseInt(token[1]);
+    	int size = Integer.parseInt(token[2]);
+    	String hash = token[3];
+		if(blockchain.getLength() > size)
+    		return;
+		//if length is smaller
+    	if(blockchain.getLength() < size) {
+    		Block head = getBlock(hash, port);
+    		if(size == 1) {
+    			blockchain.setHead(head);
+    			blockchain.setLength(1);
+    			return;
+    		}
+    		Block current = head;
+    		while(!base64(current.getPreviousHash()).equals(base64(blockchain.getHead().calculateHash()))) {
+    			current.setPreviousBlock(getBlock(base64(current.getPreviousHash()), port));
+    			System.out.println("called");
+    			current = current.getPreviousBlock();
+    		}
+    		current.setPreviousBlock(blockchain.getHead());
+    		blockchain.setHead(head);
+    		blockchain.setLength(size);
+    		return;
+    	}
+    	//if hash is smaller
+    	if(false) {
+    		
+    	}
+    }
+    
+    public Block getBlock(String hash, int port) {
+    	String remoteIP = (((InetSocketAddress) clientSocket.getRemoteSocketAddress()).getAddress()).toString().replace("/", "");
+    	Block ret = null;
+    	try {
+    		Socket socket = new Socket();
+			socket.connect(new InetSocketAddress(remoteIP, port), 2000);
+			
+			PrintWriter pw = new PrintWriter(socket.getOutputStream(), true);
+			BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			pw.println("cu|" + hash);
+			pw.flush();
+			ObjectInputStream input = new ObjectInputStream(socket.getInputStream());
+			ret = (Block) input.readObject();
+			reader.close();
+			input.close();
+			socket.close();
+			
+    	} catch (IOException e) {
+    		e.printStackTrace();
+    	} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+    	
+    	return ret;
+    }
+    
+    public static String base64(byte[] bytes) {
+    	return Base64.getEncoder().encodeToString(bytes);
+    }
 
 }
