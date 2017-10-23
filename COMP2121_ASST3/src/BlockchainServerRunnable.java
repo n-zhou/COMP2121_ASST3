@@ -62,7 +62,6 @@ public class BlockchainServerRunnable implements Runnable{
                         return;
                     case "hb":
                     	ServerInfo p = new ServerInfo(remoteIP, Integer.parseInt(tokens[1]));
-                    	System.out.println(inputLine);
                 		if(!serverStatus.containsKey(p) || tokens[2].equals("0")) {
                 			broadcast(p);
                 			serverStatus.put(p, new Date());
@@ -77,28 +76,23 @@ public class BlockchainServerRunnable implements Runnable{
                     	}
                     	break;
                     case "cu":
+                    	ObjectOutputStream output = new ObjectOutputStream(clientSocket.getOutputStream());
                 		if(tokens.length == 1) {
-                			if(blockchain.getLength() == 0)
-                				outWriter.println(String.format("lb|%d|%d|%s", clientSocket.getLocalPort(),
-                						0, base64(new byte[32])));
-                			else
-                				outWriter.println(String.format("lb|%d|%d|%s", clientSocket.getLocalPort(),
-                						blockchain.getLength(), Base64.getEncoder().encodeToString(blockchain.getHead().calculateHash())));
-                    		outWriter.flush();
+                			output.writeObject(blockchain.getHead());
                     	} else {
                     		synchronized(blockchain) {
 	                    		Block find = blockchain.getHead();
-	                    		ObjectOutputStream output = new ObjectOutputStream(clientSocket.getOutputStream());
 	                    		//relies on sender to not ask for hash that isn't in the block
 	                    		while(!base64(find.calculateHash()).equals(tokens[1])) {
+	                    			if(base64(find.getPreviousHash()).equals(base64(new byte[32])))
+	                    				break;
 	                    			find = find.getPreviousBlock();
 	                    		}
 	                    		output.writeObject(find);
-	                    		output.flush();
                     		}
-                    		return;
                     	}
-                    	break;
+                		output.flush();
+                    	return;
                     case "lb":
                     	synchronized(blockchain) {
                     		naiveCatchUp(inputLine);
@@ -118,23 +112,25 @@ public class BlockchainServerRunnable implements Runnable{
     public void broadcast(ServerInfo p) {
     	LinkedList<Thread> threads = new LinkedList<>();
     	for(ServerInfo servers : serverStatus.keySet()) {
-    		threads.add(new Thread(new Runnable() {
-    			@Override
-    			public void run() {
-    				try {
-    		            Socket toServer = new Socket();
-    		            toServer.connect(new InetSocketAddress(servers.getHost(), servers.getPort()), 2000);
-    		            PrintWriter printWriter = new PrintWriter(toServer.getOutputStream(), true);
-    		            printWriter.println(String.format("si|%d|%s|%d", clientSocket.getLocalPort(), p.getHost(), p.getPort()));
-    		            printWriter.flush();
-    		            printWriter.close();
-    		            toServer.close();
-    		        } catch (IOException e) {
+    		if(!servers.equals(p)) {
+    			threads.add(new Thread(new Runnable() {
+        			@Override
+        			public void run() {
+        				try {
+        		            Socket toServer = new Socket();
+        		            toServer.connect(new InetSocketAddress(servers.getHost(), servers.getPort()), 2000);
+        		            PrintWriter printWriter = new PrintWriter(toServer.getOutputStream(), true);
+        		            printWriter.println(String.format("si|%d|%s|%d", clientSocket.getLocalPort(), p.getHost(), p.getPort()));
+        		            printWriter.flush();
+        		            printWriter.close();
+        		            toServer.close();
+        		        } catch (IOException e) {
 
-    		        }
-    			}
-    		}));
-    		threads.getLast().start();
+        		        }
+        			}
+        		}));
+        		threads.getLast().start();
+    		}	
     	}
 
     	for(Thread t : threads)
@@ -188,10 +184,10 @@ public class BlockchainServerRunnable implements Runnable{
     	int size = Integer.parseInt(token[2]);
     	String hash = token[3];
     	
-    	//case A: do not need to catch up
+    	//catch up not needed
 		if(blockchain.getLength() > size)
     		return;
-		//if length is smaller
+		//CASE 2 OF CATCH UP
     	if(blockchain.getLength() < size) {
     		Block head = getBlock(hash, port);
     		if(size == 1) {
@@ -205,38 +201,44 @@ public class BlockchainServerRunnable implements Runnable{
         			current.setPreviousBlock(getBlock(base64(current.getPreviousHash()), port));
         			current = current.getPreviousBlock();
         		}
-        		current.setPreviousBlock(blockchain.getHead());
     		} else {
     			Block current = head;
         		while(!base64(current.getPreviousHash()).equals(base64(blockchain.getHead().calculateHash()))) {
         			current.setPreviousBlock(getBlock(base64(current.getPreviousHash()), port));
         			current = current.getPreviousBlock();
         		}
-        		current.setPreviousBlock(blockchain.getHead());
     		}
 
 
     		blockchain.setHead(head);
-    		blockchain.setLength(size);
+    		blockchain.setLength(size);	
     		return;
     	}
-    	//Do not need to catch up
+    	//catch up needed
     	if(size == 0)
     		return;
 
-    	//if hash is smaller
     	Block newHead = getBlock(hash, port);
     	Block oldHead = blockchain.getHead();
+    	//if the block is the same
     	if(base64(oldHead.calculateHash()).equals(base64(newHead.calculateHash())))
     		return;
-    	//case 
-    	if(!compareHash(oldHead.calculateHash(), newHead.calculateHash())) {
+    	//CASE 3 OF CATCH UP
+    	System.out.println("point");
+    	if(compareHash(oldHead.calculateHash(), newHead.calculateHash())) {
+    		System.out.println("decided");
     		ArrayList<Transaction> solid = newHead.getTransactions();
     		ArrayList<Transaction> old = blockchain.getPool();
     		old.addAll(oldHead.getTransactions());
     		for(Transaction t : solid)
     			old.remove(t);
     		blockchain.setHead(newHead);
+    		newHead.setPreviousBlock(null);
+    		newHead.setPreviousHash(new byte[32]);
+    	} else {
+    		System.out.println("not changed");
+    		System.out.printf("%s\n%s\n%s\n", base64(blockchain.getHead().calculateHash()), 
+    				base64(blockchain.getHead().getPreviousBlock().calculateHash()), base64(blockchain.getHead().getPreviousBlock().getPreviousHash()));
     	}
     }
 

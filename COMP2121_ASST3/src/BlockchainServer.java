@@ -30,6 +30,7 @@ public class BlockchainServer {
         Blockchain blockchain = new Blockchain();
         ConcurrentHashMap<ServerInfo, Date> serverStatus = new ConcurrentHashMap<ServerInfo, Date>();
         serverStatus.put(new ServerInfo(remoteHost, remotePort), new Date());
+        //CASE 1 OF CATCH UP
         initialCatchup(serverStatus, blockchain);
         PeriodicCommitRunnable pcr = new PeriodicCommitRunnable(blockchain);
         Thread pct = new Thread(pcr);
@@ -64,59 +65,42 @@ public class BlockchainServer {
     	ServerInfo server = null;
     	for(ServerInfo s : serverStatus.keySet())
     		server = s;
+    	int length = 0;
+    	Block block = null;
     	try {
     		Socket socket = new Socket();
     		socket.connect(new InetSocketAddress(server.getHost(), server.getPort()), 2000);
-
     		PrintWriter pw = new PrintWriter(socket.getOutputStream(), true);
-    		BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-    		Block block = null;
     		pw.println("cu");
-    		pw.flush();
-    		String line = reader.readLine();
-    		String[] tokens = line.split("[|]");
-    		int length = Integer.parseInt(tokens[2]);
-    		String hash = tokens[3];
-    		if(length == 0) {
-    			pw.close();
-    			reader.close();
-    			socket.close();
-    			return;
-    		}
-    		pw.println("cu|"+ hash);
     		pw.flush();
     		ObjectInputStream input = new ObjectInputStream(socket.getInputStream());
     		block = (Block) input.readObject();
-    		Block currentBlock = block;
-    		socket.close();
-    		while(!Base64.getEncoder().encodeToString(currentBlock.getPreviousHash()).equals("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")) {
-    			socket = new Socket();
-    			socket.connect(new InetSocketAddress(server.getHost(), server.getPort()), 2000);
-
-    			pw = new PrintWriter(socket.getOutputStream(), true);
-    			reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-    			System.out.println(Base64.getEncoder().encodeToString(currentBlock.getPreviousHash()));
-    			pw.println("cu|" + Base64.getEncoder().encodeToString(currentBlock.getPreviousHash()));
-    			pw.flush();
-    			input = new ObjectInputStream(socket.getInputStream());
-    			currentBlock.setPreviousBlock((Block) input.readObject());
-    			currentBlock = currentBlock.getPreviousBlock();
-
+    		if(block == null) {
+    			pw.close();
+    			input.close();
+    			socket.close();
+    			return;
     		}
+    		blockchain.setLength(++length);
     		blockchain.setHead(block);
-    		blockchain.setLength(length);
-    		pw.close();
-    		input.close();
-    		socket.close();
+    		while(!base64(block.getPreviousHash()).equals(base64(new byte[32]))) {
+    			socket = new Socket();
+        		socket.connect(new InetSocketAddress(server.getHost(), server.getPort()), 2000);
+        		pw = new PrintWriter(socket.getOutputStream(), true);
+        		pw.println("cu|" +base64(block.getPreviousHash()));
+        		input = new ObjectInputStream(socket.getInputStream());
+    			block.setPreviousBlock((Block) input.readObject());
+    			block = block.getPreviousBlock();
+    			blockchain.setLength(++length);
+    		}
     	} catch(IOException e) {
 
     	} catch(ClassNotFoundException e) {
     		e.printStackTrace();
     	}
-    	Block b = blockchain.getHead();
-    	if(b != null)
-    		System.out.println("\nInitial Head hash: " + BlockchainServerRunnable.base64(b.calculateHash()));
+    }
+    
+    public static String base64(byte[] bytes) {
+    	return Base64.getEncoder().encodeToString(bytes);
     }
 }

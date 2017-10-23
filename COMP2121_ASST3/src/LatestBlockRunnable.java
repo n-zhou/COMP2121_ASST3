@@ -56,7 +56,7 @@ public class LatestBlockRunnable implements Runnable {
 								printWriter.println(String.format("lb|%d|%d|%s", port, l,
 				            		Base64.getEncoder().encodeToString(b.calculateHash())));
 
-							printWriter.println("cc");
+							//printWriter.println("cc");
 				            printWriter.flush();
 
 				            // close printWriter and socket
@@ -76,7 +76,7 @@ public class LatestBlockRunnable implements Runnable {
 
 				}
 			try {
-				Thread.sleep(2100);
+				Thread.sleep(2200);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
