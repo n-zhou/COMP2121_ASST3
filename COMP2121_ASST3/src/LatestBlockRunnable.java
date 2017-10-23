@@ -6,17 +6,18 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.Date;
-import java.util.Hashtable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.HashMap;
 
 public class LatestBlockRunnable implements Runnable {
 
-	private Hashtable<ServerInfo, Date> serverStatus;
+	private ConcurrentHashMap<ServerInfo, Date> serverStatus;
 	private Blockchain blockchain;
 	private int port;
 
-	public LatestBlockRunnable(Hashtable<ServerInfo, Date> serverStatus, Blockchain blockchain, int port) {
+	public LatestBlockRunnable(ConcurrentHashMap<ServerInfo, Date> serverStatus, Blockchain blockchain, int port) {
 		this.serverStatus = serverStatus;
 		this.blockchain = blockchain;
 		this.port = port;
@@ -34,7 +35,8 @@ public class LatestBlockRunnable implements Runnable {
 				block = blockchain.getHead();
 				length = blockchain.getLength();
 			}
-			for(ServerInfo server : serverStatus.keySet()) {
+			HashMap<ServerInfo, Date> servers = new HashMap<>(serverStatus);
+			for(ServerInfo server : servers.keySet()) {
 				Block b = block;
 				int l = length;
 				threads.add(new Thread(new Runnable() {
@@ -45,7 +47,7 @@ public class LatestBlockRunnable implements Runnable {
 							Socket socket = new Socket();
 							socket.connect(new InetSocketAddress(server.getHost(), server.getPort()), 2000);
 							PrintWriter printWriter = new PrintWriter(socket.getOutputStream(), true);
-							
+
 				            // send the message forward
 							if(l == 0)
 								printWriter.println(String.format("lb|%d|%d|%s", port, l,

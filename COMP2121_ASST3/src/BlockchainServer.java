@@ -5,7 +5,7 @@ import java.net.Socket;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Hashtable;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class BlockchainServer {
 
@@ -28,13 +28,16 @@ public class BlockchainServer {
         }
 
         Blockchain blockchain = new Blockchain();
-        Hashtable<ServerInfo, Date> serverStatus = new Hashtable<ServerInfo, Date>();
+        ConcurrentHashMap<ServerInfo, Date> serverStatus = new ConcurrentHashMap<ServerInfo, Date>();
         serverStatus.put(new ServerInfo(remoteHost, remotePort), new Date());
-        catchup(serverStatus, blockchain);
+        initialCatchup(serverStatus, blockchain);
         PeriodicCommitRunnable pcr = new PeriodicCommitRunnable(blockchain);
         Thread pct = new Thread(pcr);
         pct.start();
+        //sends periodic heartbeats
         new Thread(new HeartBeat(serverStatus, localPort)).start();
+        
+        //sends periodic latestblocks
         new Thread(new LatestBlockRunnable(serverStatus, blockchain, localPort)).start();
         ServerSocket serverSocket = null;
         try {
@@ -57,7 +60,7 @@ public class BlockchainServer {
         }
     }
 
-    public static void catchup(Hashtable<ServerInfo, Date> serverStatus, Blockchain blockchain) {
+    public static void initialCatchup(ConcurrentHashMap<ServerInfo, Date> serverStatus, Blockchain blockchain) {
     	ServerInfo server = null;
     	for(ServerInfo s : serverStatus.keySet())
     		server = s;

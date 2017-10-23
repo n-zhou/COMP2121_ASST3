@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
-import java.util.Hashtable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -13,9 +13,9 @@ public class BlockchainServerRunnable implements Runnable{
 
     private Socket clientSocket;
     private Blockchain blockchain;
-    private Hashtable<ServerInfo, Date> serverStatus;
+    private ConcurrentHashMap<ServerInfo, Date> serverStatus;
 
-    public BlockchainServerRunnable(Socket clientSocket, Blockchain blockchain, Hashtable<ServerInfo, Date> serverStatus) {
+    public BlockchainServerRunnable(Socket clientSocket, Blockchain blockchain, ConcurrentHashMap<ServerInfo, Date> serverStatus) {
         this.clientSocket = clientSocket;
         this.blockchain = blockchain;
         this.serverStatus = serverStatus;
@@ -48,13 +48,11 @@ public class BlockchainServerRunnable implements Runnable{
             	String[] tokens = inputLine.split("\\|");
                 switch (tokens[0]) {
                     case "tx":
-                    	synchronized(blockchain) {
-                    		if (blockchain.addTransaction(inputLine))
-                                outWriter.print("Accepted\n\n");
-                            else
-                                outWriter.print("Rejected\n\n");
-                            outWriter.flush();
-                    	}
+                		if (blockchain.addTransaction(inputLine))
+                            outWriter.print("Accepted\n\n");
+                        else
+                            outWriter.print("Rejected\n\n");
+                        outWriter.flush();
                         break;
                     case "pb":
                 		outWriter.print(blockchain.toString() + "\n");
@@ -67,8 +65,8 @@ public class BlockchainServerRunnable implements Runnable{
                     	System.out.println(inputLine);
                 		if(!serverStatus.containsKey(p) || tokens[2].equals("0")) {
                 			broadcast(p);
-                			serverStatus.put(p, new Date());	
-                		}                 		
+                			serverStatus.put(p, new Date());
+                		}
                     	break;
                     case "si":
                 		p = new ServerInfo(tokens[2], Integer.parseInt(tokens[3]));
@@ -82,7 +80,7 @@ public class BlockchainServerRunnable implements Runnable{
                 		if(tokens.length == 1) {
                 			if(blockchain.getLength() == 0)
                 				outWriter.println(String.format("lb|%d|%d|%s", clientSocket.getLocalPort(),
-                						blockchain.getLength(), base64(new byte[32])));
+                						0, base64(new byte[32])));
                 			else
                 				outWriter.println(String.format("lb|%d|%d|%s", clientSocket.getLocalPort(),
                 						blockchain.getLength(), Base64.getEncoder().encodeToString(blockchain.getHead().calculateHash())));
@@ -91,7 +89,7 @@ public class BlockchainServerRunnable implements Runnable{
                     		synchronized(blockchain) {
 	                    		Block find = blockchain.getHead();
 	                    		ObjectOutputStream output = new ObjectOutputStream(clientSocket.getOutputStream());
-	                    		System.out.println("hash: " + tokens[1]);
+	                    		//relies on sender to not ask for hash that isn't in the block
 	                    		while(!base64(find.calculateHash()).equals(tokens[1])) {
 	                    			find = find.getPreviousBlock();
 	                    		}
@@ -189,6 +187,8 @@ public class BlockchainServerRunnable implements Runnable{
     	int port = Integer.parseInt(token[1]);
     	int size = Integer.parseInt(token[2]);
     	String hash = token[3];
+    	
+    	//case A: do not need to catch up
 		if(blockchain.getLength() > size)
     		return;
 		//if length is smaller
@@ -220,6 +220,7 @@ public class BlockchainServerRunnable implements Runnable{
     		blockchain.setLength(size);
     		return;
     	}
+    	//Do not need to catch up
     	if(size == 0)
     		return;
 
@@ -228,7 +229,8 @@ public class BlockchainServerRunnable implements Runnable{
     	Block oldHead = blockchain.getHead();
     	if(base64(oldHead.calculateHash()).equals(base64(newHead.calculateHash())))
     		return;
-    	if(compareHash(oldHead.calculateHash(), newHead.calculateHash())) {
+    	//case 
+    	if(!compareHash(oldHead.calculateHash(), newHead.calculateHash())) {
     		ArrayList<Transaction> solid = newHead.getTransactions();
     		ArrayList<Transaction> old = blockchain.getPool();
     		old.addAll(oldHead.getTransactions());
