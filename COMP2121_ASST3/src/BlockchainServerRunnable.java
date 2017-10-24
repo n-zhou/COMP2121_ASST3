@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -62,9 +63,8 @@ public class BlockchainServerRunnable implements Runnable{
                         return;
                     case "hb":
                     	ServerInfo p = new ServerInfo(remoteIP, Integer.parseInt(tokens[1]));
-                		if(!serverStatus.containsKey(p) || tokens[2].equals("0")) {
+                		if(serverStatus.put(p, new Date()) == null || tokens[2].equals("0")) {
                 			broadcast(p);
-                			serverStatus.put(p, new Date());
                 		}
                     	break;
                     case "si":
@@ -208,8 +208,6 @@ public class BlockchainServerRunnable implements Runnable{
         			current = current.getPreviousBlock();
         		}
     		}
-
-
     		blockchain.setHead(head);
     		blockchain.setLength(size);	
     		return;
@@ -224,21 +222,32 @@ public class BlockchainServerRunnable implements Runnable{
     	if(base64(oldHead.calculateHash()).equals(base64(newHead.calculateHash())))
     		return;
     	//CASE 3 OF CATCH UP
-    	System.out.println("point");
+    	
     	if(compareHash(oldHead.calculateHash(), newHead.calculateHash())) {
-    		System.out.println("decided");
-    		ArrayList<Transaction> solid = newHead.getTransactions();
+    		System.out.println("point");
+    		ArrayList<Transaction> solid = new ArrayList<>();
     		ArrayList<Transaction> old = blockchain.getPool();
-    		old.addAll(oldHead.getTransactions());
+    		//HashMap<String, Block> chain = getChain();
+    		Block current = newHead;
+    		Block remove = oldHead;
+    		for(int i = 0; i < size; ++i) {
+    			if(current == null || remove == null)
+    				break;
+    			if(!base64(current.calculateHash()).equals(base64(remove.calculateHash()))) {
+    				solid.addAll(current.getTransactions());
+    				old.addAll(remove.getTransactions());
+    			}
+    			if(base64(current.getPreviousHash()).equals(base64(remove.getPreviousHash()))){
+    				current.setPreviousBlock(remove.getPreviousBlock());
+    				break;
+    			}
+    			current.setPreviousBlock(getBlock(base64(current.getPreviousHash()), port));
+    			current = current.getPreviousBlock();
+    			remove = remove.getPreviousBlock();
+    		}
     		for(Transaction t : solid)
     			old.remove(t);
     		blockchain.setHead(newHead);
-    		newHead.setPreviousBlock(null);
-    		newHead.setPreviousHash(new byte[32]);
-    	} else {
-    		System.out.println("not changed");
-    		System.out.printf("%s\n%s\n%s\n", base64(blockchain.getHead().calculateHash()), 
-    				base64(blockchain.getHead().getPreviousBlock().calculateHash()), base64(blockchain.getHead().getPreviousBlock().getPreviousHash()));
     	}
     }
 
@@ -280,6 +289,16 @@ public class BlockchainServerRunnable implements Runnable{
     		if(h1[i] != h2[i])
     			return h1[i] > h2[i];
     	return false;
+    }
+    
+    public HashMap<String, Block> getChain(){
+    	HashMap<String, Block> chain = new HashMap<>();
+    	Block b = blockchain.getHead();
+    	while(b != null) {
+    		chain.put(base64(b.calculateHash()), b);
+    		b = b.getPreviousBlock();
+    	}
+    	return chain;
     }
 
 }
